@@ -6,10 +6,14 @@
 #include <thrust/functional.h>
 #include <thrust/device_ptr.h>
 #include <thrust/execution_policy.h>
+
+#include <cmath>
 #include <thrust/device_vector.h>
 
 __device__ __host__ int CeilDiv(int a, int b) { return (a-1)/b + 1; }
 __device__ __host__ int CeilAlign(int a, int b) { return CeilDiv(a, b) * b; }
+
+#define THREAD_SIZE 512
 
 struct to01
 {
@@ -30,7 +34,26 @@ void CountPosition1(const char *text, int *pos, int text_size)
     thrust::transform(d_pos, d_pos+text_size, keys.begin(), d_pos, thrust::multiplies<int>());
 }
 
+__global__ void Count(const char* text, int* pos, int end)
+{
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	if (idx > end)
+		return;
+	if (text[idx] == '\n')
+		return;
+
+	if (text[idx-1] == '\n' || idx == 0)
+	{
+        int count = 1;
+        while(1)
+        {
+            pos[idx] = count++;
+            if (text[++idx] == '\n' || idx > end) return;
+        }
+	}
+}
+
 void CountPosition2(const char *text, int *pos, int text_size)
 {
-
+	Count <<<CeilDiv(text_size, THREAD_SIZE), THREAD_SIZE>>>(text, pos, text_size -1);
 }
